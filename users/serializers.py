@@ -1,50 +1,43 @@
-from rest_framework import serializers, status
-from .models import CustomUser
-from rest_framework.exceptions import ValidationError
-
+from rest_framework import serializers
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
+from .models import User
 
 class SignUpSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True)
-    conf_password = serializers.CharField(write_only=True, required=True)
-
     class Meta:
-        model = CustomUser
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone_number', 'address', 'password',
-                  'conf_password']
-
-    def validate(self, data):
-        password = data.get('password', None)
-        conf_password = data.get('conf_password', None)
-
-        if password is None or conf_password is None or password != conf_password:
-            response = {
-                'status': status.HTTP_400_BAD_REQUEST,
-                'message': 'Parollar mos emas yoki xato kiritildi'
-            }
-            raise ValidationError(response)
-        if len([i for i in password if i == ' ']) > 0:
-            response = {
-                'status': status.HTTP_400_BAD_REQUEST,
-                'message': 'Parollar xato kiritildi'
-            }
-            raise ValidationError(response)
-
-        return data
-
-    def validate_username(self, username):
-        if len(username) < 6:
-            raise ValidationError({'message': 'Username kamida 7 ta bolishi kerak'})
-        elif not username.isalnum():
-            raise ValidationError({'message': 'Username da ortiqcha belgilar bolmasligi kerak'})
-        elif username[0].isdigit():
-            raise ValidationError({'message': 'Username raqam bilan boshlanmasin'})
-        return username
+        model = User
+        fields = ('username', 'email', 'password', 'role')
+        extra_kwargs = {
+            'password': {'write_only': True}
+        }
 
     def create(self, validated_data):
-        validated_data.pop('conf_password')
+        return User.objects.create_user(**validated_data)
 
-        user = CustomUser.objects.create_user(
-            **validated_data
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    def validate(self, data):
+        user = authenticate(
+            username=data['username'],
+            password=data['password']
         )
+        if not user:
+            raise serializers.ValidationError("Noto'g'ri parol yoki username")
 
-        return user
+        refresh = RefreshToken.for_user(user)
+        return {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        user = self.context['request'].user
+
+        if not user.check_password(data['old_password']):
+            raise serializers.ValidationError("Avvalgi parolingiz noto'g'ri")
+        return data

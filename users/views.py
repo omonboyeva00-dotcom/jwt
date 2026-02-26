@@ -1,64 +1,63 @@
 from django.shortcuts import render
-from rest_framework import status
-from rest_framework.response import Response
-from .models import CustomUser
-from .serializers import SignUpSerializer
 from rest_framework.views import APIView
-from django.contrib.auth import authenticate
-from rest_framework.exceptions import ValidationError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-
-
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from .serializers import SignUpSerializer, LoginSerializer, ChangePasswordSerializer
 
 
 class SignUpView(APIView):
-    def post(self, request):
+    def post(selfself, request):
         serializer = SignUpSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        response = {
-            'status': status.HTTP_201_CREATED,
-            'message': user.username
-        }
-        return Response(response)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Foydalanuvchi yaratildi"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
     def post(self, request):
-        username = self.request.data.get('username')
-        password = self.request.data.get('password')
-
-        user = authenticate(username=username, password=password)
-
-        if not user:
-            raise ValidationError({'message': 'Username yoki parol notogri'})
-
-        refresh_token=RefreshToken.for_user(user=user)
-
-        response = {
-            'status': status.HTTP_201_CREATED,
-            'message': 'Siz ruxatdan otdingiz',
-            'refresh': str(refresh_token),
-            'access':str(refresh_token.access_token)
-        }
-        return Response(response)
-
-
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(serializer.validated_data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
-            refresh_token = request.data.get("refresh")
+            refresh_token = request.data["refresh"]
             token = RefreshToken(refresh_token)
             token.blacklist()
-
-            return Response(
-                {"message": "Muvaffaqiyatli logout qilindi"},
-                status=status.HTTP_205_RESET_CONTENT
-            )
-
+            return Response({"message": "Hisobdan chiqildi"})
         except Exception:
-            raise ValidationError({"message": "Token noto'g'ri yoki allaqachon blacklistda"})
+            return Response({"error": "Token noto'g'ri"},status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            "username": request.user.username,
+            "email": request.user.email,
+            "role": request.user.role,
+        })
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+        if serializer.is_valid():
+            request.user.set_password(
+                serializer.validated_data["new_password"]
+            )
+            request.user.save()
+            return Response({"message": "Parol muvaffaqiyatli o'zgartirildi"})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
