@@ -50,14 +50,42 @@ class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = ChangePasswordSerializer(
-            data=request.data,
-            context={"request": request}
-        )
+        serializer = ChangePasswordSerializer(data=request.data,context={"request": request})
         if serializer.is_valid():
-            request.user.set_password(
-                serializer.validated_data["new_password"]
-            )
+            request.user.set_password(serializer.validated_data["new_password"] )
             request.user.save()
             return Response({"message": "Parol muvaffaqiyatli o'zgartirildi"})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class LoginRefreshView(APIView):
+    def post(self, request):
+        refresh_token = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response(
+                {"error": "Refresh token kiritilmadi"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            token = RefreshToken(refresh_token)
+            return Response(
+                {"access": str(token.access_token)},
+                status=status.HTTP_200_OK
+            )
+        except Exception:
+            return Response(
+                {"error": "Refresh token yaroqsiz yoki muddati tugagan"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+class ResetPasswordView(APIView):
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Parol muvaffaqiyatli yangilandi"},
+                status=status.HTTP_200_OK
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

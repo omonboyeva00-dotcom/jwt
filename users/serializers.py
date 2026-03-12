@@ -2,6 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class SignUpSerializer(serializers.ModelSerializer):
     class Meta:
@@ -41,3 +44,21 @@ class ChangePasswordSerializer(serializers.Serializer):
         if not user.check_password(data['old_password']):
             raise serializers.ValidationError("Avvalgi parolingiz noto'g'ri")
         return data
+
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Bu email bilan foydalanuvchi topilmadi")
+        return value
+
+    def save(self):
+        email = self.validated_data["email"]
+        new_password = self.validated_data["new_password"]
+        user = User.objects.get(email=email)
+        user.set_password(new_password)
+        user.save()
